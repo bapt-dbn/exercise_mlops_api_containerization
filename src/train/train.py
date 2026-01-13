@@ -47,7 +47,8 @@ class SpamClassifierWrapper(mlflow.pyfunc.PythonModel):
 def run_training(config_path: str | None = None) -> str:
     settings = Settings.from_yaml(config_path) if config_path else Settings.from_yaml()
 
-    # TODO: Tracking URL and experiment name
+    mlflow.set_tracking_uri(settings.mlflow.tracking_uri)
+    mlflow.set_experiment(settings.mlflow.experiment_name)
 
     mlflow.sklearn.autolog(log_models=False)
 
@@ -55,22 +56,34 @@ def run_training(config_path: str | None = None) -> str:
         run_id = run.info.run_id
         print(f"[+] Starting MLflow run: {run_id}")
 
-        # TODO: Store parameters in MLflow
+        mlflow.log_params(
+            {
+                "data.path": settings.data.path,
+                "data.test_size": settings.data.test_size,
+                "data.random_state": settings.data.random_state,
+                "features.tfidf.max_features": settings.features.tfidf.max_features,
+                "features.tfidf.ngram_range": str(settings.features.tfidf.ngram_range),
+                "features.tfidf.min_df": settings.features.tfidf.min_df,
+                "model.type": settings.model.type,
+                "model.C": settings.model.params.C,
+                "model.max_iter": settings.model.params.max_iter,
+            }
+        )
 
         print("[+] Loading data...")
         df = load_data(settings.data.path)
-        # TODO: Store len of the data in MLFLOW before preprocessing
+        mlflow.log_metric("data.raw_samples", len(df))
 
         print("[+] Extracting numerical features...")
         X_numerical = extract_numerical_features(df[DatasetColumn.MESSAGE].tolist())
 
         print("[+] Preprocessing...")
         df = preprocess_dataframe(df)
-        # TODO: Store len of the data in MLFLOW after preprocessing
+        mlflow.log_metric("data.clean_samples", len(df))
 
         class_counts = df[DatasetColumn.LABEL].value_counts().to_dict()
         for label, count in class_counts.items():
-            # TODO: Store label in MLFlow
+            mlflow.log_metric(f"data.class_{label}", count)
 
         print("[+] Fitting vectorizer and scaler...")
         vectorizer = fit_vectorizer(df[DatasetColumn.MESSAGE].tolist())
@@ -85,10 +98,12 @@ def run_training(config_path: str | None = None) -> str:
         label_encoder = LabelEncoder()
         y = label_encoder.fit_transform(df[DatasetColumn.LABEL].values)
 
-        # TODO: Store feature information in MLFlow
+        mlflow.log_metric("features.vocabulary_size", len(vectorizer.vocabulary_))
+        mlflow.log_metric("features.numerical_features_count", X_numerical_scaled.shape[1])
 
         X_train, X_test, y_train, y_test = split_data(X, y)
-        # TODO: Store train/test split information in MLFLOW
+        mlflow.log_metric("data.train_samples", X_train.shape[0])
+        mlflow.log_metric("data.test_samples", X_test.shape[0])
 
         print("[+] Training model...")
         model = create_model()
@@ -100,8 +115,7 @@ def run_training(config_path: str | None = None) -> str:
 
         metrics = evaluate_model(y_test, y_pred, y_proba)
 
-        # TODO: Store evaluation metrics in MLFlow
-
+        mlflow.log_metrics(metrics.to_dict())
 
         print(f"[!]   Accuracy:  {metrics.accuracy:.4f}")
         print(f"[!]   Precision: {metrics.precision:.4f}")
@@ -117,13 +131,25 @@ def run_training(config_path: str | None = None) -> str:
         example_output = wrapped_model.predict(None, example_input)
         signature = infer_signature(example_input, example_output)
 
-        # TODO: Store model signature in MLFlow
+        mlflow.pyfunc.log_model(
+            artifact_path="model",
+            python_model=wrapped_model,
+            signature=signature,
+            input_example=example_input,
+            pip_requirements=[
+                "scikit-learn>=1.5.0",
+                "pandas>=2.2.0",
+            ],
+        )
 
-        # TODO: Store model in MLflow
+        registered_model = mlflow.register_model(
+            model_uri=f"runs:/{run_id}/model",
+            name=settings.mlflow.registered_model_name,
+        )
         print(f"[+] Model registered: {registered_model.name} v{registered_model.version}")
 
         if config_path:
-            # TODO: Store configuration in MLflow
+            mlflow.log_artifact(config_path, artifact_path="config")
 
         print(f"[+] Training complete! Run ID: {run_id}")
         print("   View at: mlflow ui --port 5000")
