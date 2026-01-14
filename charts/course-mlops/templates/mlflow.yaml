@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-mlflow
+spec:
+  replicas: {{ .Values.mlflow.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-mlflow
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-mlflow
+    spec:
+      containers:
+      - name: mlflow
+        image: "{{ .Values.mlflow.image.repository }}:{{ .Values.mlflow.image.tag }}"
+        ports:
+        - containerPort: 5000
+        command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "file:///mlflow/mlruns", "--default-artifact-root", "file:///mlflow/mlruns"]
+        volumeMounts:
+        - mountPath: "/mlflow/mlruns"
+          name: mlruns-storage
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: mlruns-storage
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-mlruns-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mlflow
+spec:
+  type: {{ .Values.mlflow.service.type }}
+  selector:
+    app: {{ .Release.Name }}-mlflow
+  ports:
+    - protocol: TCP
+      port: {{ .Values.mlflow.service.port }}
+      targetPort: 5000
+      {{- if eq .Values.mlflow.service.type "NodePort" }}
+      nodePort: {{ .Values.mlflow.service.nodePort }}
+      {{- end }}

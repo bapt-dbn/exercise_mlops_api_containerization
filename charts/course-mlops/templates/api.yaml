@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: 
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app: 
+  template:
+    metadata:
+      labels:
+        app: 
+    spec:
+      containers:
+      - name: 
+        image: 
+        imagePullPolicy: 
+        ports:
+        - containerPort:
+        env:
+        - name: 
+          value: 
+        volumeMounts:
+        - mountPath: 
+          name: 
+        readinessProbe:
+          httpGet:
+            path: 
+            port:
+          initialDelaySeconds: 
+          periodSeconds: 
+      volumes:
+      - name: 
+        persistentVolumeClaim:
+          claimName: 
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: 
+spec:
+  selector:
+    app: 
+  ports:
+    - protocol: TCP
+      port: 
+      targetPort: 
+      nodePort: 
+  type: 
